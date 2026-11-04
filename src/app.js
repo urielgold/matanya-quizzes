@@ -437,13 +437,30 @@ function homeV(){
   return `<div class="wrap wide">
     <div class="top">
       ${brandHTML()}
-      <div class="lacts"><button class="btn ghost" data-act="tojoin">הצטרפות עם קוד</button><button class="btn primary createbtn" data-act="new">+ צור</button></div>
+      <div class="lacts"><label class="btn ghost" title="טעינת חידון מקובץ שנשמר">ייבוא חידון<input type="file" id="impfile" accept=".json,application/json" hidden></label><button class="btn ghost" data-act="tojoin">הצטרפות עם קוד</button><button class="btn primary createbtn" data-act="new">+ צור</button></div>
     </div>
+    ${view.impMsg?`<div class="warn">${esc(view.impMsg)}</div>`:''}
     ${activeGame?`<div class="resume"><span>יש לך משחק פעיל (קוד <b dir="ltr">${esc(activeGame.pin)}</b>). רוצה לחזור אליו?</span><button class="btn primary sm" data-act="resume">חזרה למשחק</button><button class="btn ghost sm" data-act="resume-no">לא, לסגור אותו</button></div>`:''}
     <div class="top"><span class="label">החידונים שלי</span><span class="acct">${cloudBadge()}<span class="muted email" dir="ltr">${esc(user.email||'')}</span><button class="btn sm ghost" data-act="logout">יציאה</button></span></div>
     ${loading?'<div class="empty">טוען את החידונים שלך…</div>':quizzes.length?`<div class="kgrid">${cards}</div>`:`<div class="empty">אין עדיין חידונים.<br>לחץ על "+ צור" כדי לבנות את הראשון, או <button class="btn sm" data-act="sample">הוסף חידון דוגמה</button></div>`}
   </div>`;
 }
+function importQuiz(text){
+  let d;try{d=JSON.parse(text)}catch(e){return null}
+  if(!d||typeof d!=='object'||!Array.isArray(d.questions)) return null;
+  const qs=[];
+  for(const q of d.questions.slice(0,200)){
+    if(!q||typeof q.q!=='string') continue;
+    const tf=q.type==='tf';
+    const ans=Array.isArray(q.answers)?q.answers.slice(0,4).map(a=>cut(String(a==null?'':a),120)):[];
+    while(ans.length<4) ans.push('');
+    const cor=(Array.isArray(q.correct)?q.correct:[0]).map(Number).filter(i=>i>=0&&i<4);
+    qs.push({type:tf?'tf':'quiz',q:cut(q.q,300),answers:tf?['נכון','לא נכון','','']:ans,correct:cor.length?[...new Set(cor)]:[0],time:[5,10,20,30,60,90].includes(+q.time)?+q.time:20,points:[0,1,2].includes(+q.points)?+q.points:1,img:null});
+  }
+  if(!qs.length) return null;
+  return {id:newId(),title:cut(String(d.title||'חידון מיובא'),80),questions:qs,updated:Date.now()};
+}
+
 async function doAuth(email,pw){
   authBusy=true;authMsg='';render();
   try{
@@ -1285,6 +1302,12 @@ document.addEventListener('drop',e=>{const b=e.target.closest&&e.target.closest(
 })();
 document.addEventListener('input',e=>{if(e.target&&e.target.id==='ztitle'&&titleSaved){titleSaved=false;const t=$('#tsave');if(t){t.classList.remove('done');t.textContent='שמור'}}});
 document.addEventListener('change',e=>{
+  if(e.target.id==='impfile'&&e.target.files&&e.target.files[0]){
+    const f=e.target.files[0];
+    if(f.size>2*1024*1024){view.impMsg='הקובץ גדול מדי.';render();return}
+    f.text().then(t=>{const z=importQuiz(t);if(!z){view.impMsg='לא הצלחנו לקרוא את הקובץ. צריך קובץ חידון בפורמט הנכון.';render();return}view.impMsg='';addQuiz(z);go({name:'edit',id:z.id,qi:0})});
+    return;
+  }
   if(e.target.classList.contains('qimgfile')&&e.target.files[0]){uploadQImg(+e.target.dataset.i,e.target.files[0]);return}
   if(e.target.dataset.qtype!==undefined){
     const z=findQ(view.id),q=z.questions[+e.target.dataset.qtype],t=e.target.value;
