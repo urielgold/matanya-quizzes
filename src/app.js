@@ -768,9 +768,18 @@ const INTRO_MS=4500;
 function phaseIntro(){
   clearTimeout(G.to);
   G.phase='intro';G.showImg=false;G.ans={};G.cur=0;G.players.forEach(p=>{p.choice=null;p.gain=0;p.prev=p.score});
-  G.round=G.seq;
+  G.round=G.seq;G.introAt=performance.now();
   renderGame();publish();musicPlay('calm');
+  clearInterval(G.timer);G.timer=setInterval(introTick,150);
   G.to=setTimeout(phaseQuestion,INTRO_MS);
+}
+let lastCd=0;
+function introTick(){
+  if(!G||G.phase!=='intro'){if(G)clearInterval(G.timer);return}
+  const left=INTRO_MS-(performance.now()-G.introAt),n=left>3000?0:Math.max(1,Math.ceil(left/1000));
+  const el=$('#cd');if(el){el.textContent=n||'';el.classList.toggle('on',!!n)}
+  if(n&&n!==lastCd){lastCd=n;beep(520+(3-n)*120,.09,'sine',.06)}
+  if(!n) lastCd=0;
 }
 function phaseQuestion(){
   if(!G) return;
@@ -820,6 +829,8 @@ async function phaseReveal(){
     p.gain=ok?Math.round(1000*q.points*(1-Math.min(1,a.t/(q.time*1000))/2)):0;
     p.score+=p.gain;
     p.streak=ok?(p.streak||0)+1:0;
+    p.right=(p.right||0)+(ok?1:0);
+    (p.hist=p.hist||[])[G.i]=a?(ok?'✓':'✗'):'–';
   });
   G.phase='reveal';G.seq++;musicStop();chime();renderGame();publish();
   if(S.auto) G.to=setTimeout(next,5500);
@@ -945,6 +956,18 @@ function barsHTML(){
   return `<div class="bars">${idx.map((j,k)=>`<div class="bcol"><div class="bar c${j}" style="height:${Math.max(3,Math.round(counts[k]/mx*100))}%"></div><div class="blab c${j}"><b>${LET[j]}</b> ${counts[k]} ${q.correct.includes(j)?'✓':''}</div></div>`).join('')}</div>`;
 }
 function boardRows(list,from){return list.map((p,i)=>`<div class="brow ${i===0&&!from?'first':''}" style="animation-delay:${i*.08}s"><span class="r">${i+1+(from||0)}</span>${avHTML(p.av,'sm')}<span class="nm">${esc(p.name)}</span><span class="sc">${fmt(p.score)}${p.gain&&G.phase==='board'?`<span class="d" dir="ltr">+${p.gain}</span>`:''}</span></div>`).join('')}
+function downloadResults(){
+  if(!G) return;
+  const q=s=>'"'+String(s==null?'':s).replace(/"/g,'""')+'"';
+  const n=G.qs.length,rk=ranked();
+  const head=['מקום','שם','ניקוד','תשובות נכונות','מתוך',...G.qs.map((_,i)=>'שאלה '+(i+1))];
+  const rows=rk.map((p,k)=>[k+1,p.name,p.score,p.right||0,n,...G.qs.map((_,i)=>(p.hist&&p.hist[i])||'')]);
+  const csv='\ufeff'+[head,...rows].map(r=>r.map(q).join(',')).join('\r\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=('תוצאות - '+(G.quiz.title||'חידון')).replace(/[\\/:*?"<>|]/g,'')+'.csv';
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
+}
 function ranked(){return G.players.filter(p=>!p.left||p.score>0).sort((a,b)=>b.score-a.score)}
 function renderGame(){
   if(!G) return;
@@ -970,6 +993,7 @@ function renderGame(){
     h=`<div class="stage">${stageTop()}<div class="center">
       <div class="label">שאלה ${G.i+1} מתוך ${G.qs.length}</div>
       <div class="intro-card"><div class="intro-q">${esc(q.q)}</div></div>
+      <div class="cd" id="cd"></div>
       <div class="introbar"><i style="animation-duration:${INTRO_MS/1000}s"></i></div>
     </div></div>`;
   } else if(G.phase==='question'){
@@ -1016,7 +1040,7 @@ function renderGame(){
       ${solo?`<div class="intro-n">${fmt(r[0].score)}</div><p class="muted" style="margin:0">נקודות מתוך ${fmt(max)} אפשריות</p>`
       :`<div class="podium">${pod.map((p,i)=>p?`<div class="pod p${[2,1,3][i]}">${avHTML(p.av,'big2')}<span class="nm">${esc(p.name)}</span><div class="blk"><b>${[2,1,3][i]}</b><span>${fmt(p.score)}</span></div></div>`:'<div class="pod"></div>').join('')}</div>
         ${r.length>3?`<div class="board">${boardRows(r.slice(3,8),3)}</div>`:''}`}
-      <div class="controls"><button class="btn primary big" data-act="again">משחק חוזר</button><button class="btn big" data-act="home">לכל החידונים</button></div>
+      <div class="controls">${G.live||G.players.length>0?`<button class="btn big" data-act="dlres">הורדת תוצאות</button>`:''}<button class="btn primary big" data-act="again">משחק חוזר</button><button class="btn big" data-act="home">לכל החידונים</button></div>
     </div></div>`;
   }
   app.innerHTML=h;
@@ -1071,6 +1095,7 @@ async function joinGame(pin,nick,av){
   leavePlayer(true);
   PL={pin,nick,av,avOpen:false,state:res.state||{},status:res.status,picked:{},sending:{},sendErr:{},seen:{},conn:true,hostHere:true,hostSeenAt:Date.now(),ch:null,poll:0,clock:0,gone:false};
   try{PL.picked=JSON.parse(sessionStorage.getItem('matanya.picked.'+pin))||{}}catch(e){}
+  PL.late=!!(res.state&&res.state.phase&&res.state.phase!=='lobby'&&!(res.state.scores&&res.state.scores[playerId()]));
   saveLastGame();
   view={name:'player'};
   PL.ch=api.playerChannel(pin,{
@@ -1102,9 +1127,11 @@ function applyGame(row){
   const statusChanged=PL.status!==row.status;
   PL.status=row.status;
   if(st.phase==='question'&&!PL.seen[st.r]) PL.seen[st.r]=Date.now()-(st.time*1000-(st.rem||st.time*1000));
+  if(st.phase==='intro'&&(old.phase!=='intro'||old.r!==st.r)) PL.introSeen=Date.now();
   const same=JSON.stringify(st)===JSON.stringify(old);
   PL.state=st;
   if(st.gid&&old.gid&&st.gid!==old.gid){PL.picked={};PL.seen={}}
+  if(st.phase==='reveal'&&old.phase!=='reveal'){PL.late=false;revealFeedback(st)}
   if(statusChanged&&same)renderPlayer(true);
   if(!same){renderPlayer(true);if(st.phase==='question')checkMyAnswer()}
 }
@@ -1121,12 +1148,21 @@ function leavePlayer(keep){
   PL=null;
 }
 function savePicked(){try{sessionStorage.setItem('matanya.picked.'+PL.pin,JSON.stringify(PL.picked))}catch(e){}}
+function buzz(p){try{if(navigator.vibrate)navigator.vibrate(p)}catch(e){}}
+function revealFeedback(st){
+  const mine=st.res&&st.res[playerId()];
+  const ok=mine&&mine[3]>=0&&Array.isArray(st.c)&&st.c.includes(mine[3]);
+  if(ok){chime();buzz([40,40,80])}
+  else if(mine&&mine[3]>=0){beep(180,.25,'sawtooth',.07);buzz(160)}
+  else beep(260,.15,'sine',.05);
+}
 async function pickAnswer(j){
   if(!PL) return;
   const st=PL.state;
   if(st.phase!=='question'||st.paused||PL.picked[st.r]!==undefined) return;
   const r=st.r;
   PL.picked[r]=j;PL.sending[r]=true;PL.sendErr[r]='';savePicked();renderPlayer(true);
+  beep(600,.07,'sine',.07);buzz(25);
   try{
     const out=await api.submitAnswer(PL.pin,r,j);
     if(!PL) return;
@@ -1145,6 +1181,10 @@ function connBar(){
 function playerClock(){
   if(!PL) return;
   const st=PL.state;
+  if(st.phase==='intro'){
+    const el=$('#pcd');
+    if(el){const left=4500-(Date.now()-(PL.introSeen||Date.now())),n=left>3000?0:Math.max(1,Math.ceil(left/1000));el.textContent=n||'';el.classList.toggle('on',!!n)}
+  }
   if(st.phase==='question'){
     const el=$('#psec');
     if(el){const sec=st.paused?Math.ceil((st.rem||0)/1000):Math.max(0,Math.ceil(((PL.seen[st.r]||Date.now())+st.time*1000-Date.now())/1000));el.textContent=sec}
@@ -1159,6 +1199,7 @@ function renderPlayer(force){
   const myName=(P.names&&P.names[me])||PL.nick;
   const top=`<div class="me-bar"><span style="display:flex;align-items:center;gap:8px">${avHTML(PL.av,'sm')}${esc(myName)}</span><span class="muted" dir="ltr">${PL.pin}</span><button class="btn sm ghost" data-act="pleave">יציאה</button></div>
     <div class="pconn" id="pconn" ${PL.conn?'hidden':''}>החיבור נפל — מתחבר מחדש…</div>
+    ${PL.late&&P.phase&&P.phase!=='reveal'&&P.phase!=='final'?`<div class="pconn late">הצטרפת באמצע המשחק. הניקוד שלך מתחיל מהשאלה הבאה, ואפשר לענות כבר עכשיו.</div>`:''}
     <div class="pconn soft" id="phost" hidden>המסך של המנחה לא מחובר כרגע. המשחק ימשיך כשהוא יחזור.</div>`;
   let h='';
   const mine=P.res&&P.res[me]?P.res[me]:null;
@@ -1173,7 +1214,7 @@ function renderPlayer(force){
       <button class="btn" data-act="avopen">${PL.avOpen?'סגירה':'החלפת דמות'}</button>
       ${PL.avOpen?`<div class="avgrid">${AVS.map((e,i)=>`<button class="avbtn ${i===PL.av?'on':''}" data-act="avpick" data-i="${i}" aria-label="דמות ${i+1}">${avHTML(i,'big3')}</button>`).join('')}</div>`:''}</div>`;
   } else if(P.phase==='intro'){
-    h=`<div class="center"><div class="label">שאלה ${(P.i||0)+1} מתוך ${P.n}</div><div class="intro-n">${(P.i||0)+1}</div><div class="qmini">${esc(P.q)}</div><p class="muted">התכוננו…</p></div>`;
+    h=`<div class="center"><div class="label">שאלה ${(P.i||0)+1} מתוך ${P.n}</div><div class="intro-n">${(P.i||0)+1}</div><div class="qmini">${esc(P.q)}</div><div class="cd pcd" id="pcd"></div><p class="muted">התכוננו…</p></div>`;
   } else if(P.phase==='question'){
     const picked=PL.picked[P.r];
     if(picked!==undefined){
@@ -1262,6 +1303,7 @@ document.addEventListener('click',e=>{
     case 'next': next();break;
     case 'pause': togglePause();break;
     case 'quit': {const qid=G.quiz.id;stopGame();go({name:'quiz',id:qid});break}
+    case 'dlres': downloadResults();break;
     case 'again': {const qid=G.quiz.id,live=G.live,pin=G.pin;stopGame(false);if(live){setupPin=pin;startLive(qid)}else startLocal(qid);break}
     case 'pans': pickAnswer(j);break;
     case 'xclose': {

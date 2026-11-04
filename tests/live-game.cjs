@@ -97,6 +97,10 @@ async function waitText(page, re, ms = 20000) {
   const expectCorrect = {};
   for (let qi = 0; qi < CORRECT.length; qi++) {
     // Q4 (index 3): host refreshes the page mid-question and resumes.
+    if (qi === 1) {
+      const seen = await active[0].page.waitForFunction(() => { const e = document.querySelector('#pcd'); return e && /^[123]$/.test(e.textContent.trim()); }, null, { timeout: 8000 }).then(() => true).catch(() => false);
+      seen ? log('  phone shows the 3-2-1 countdown') : fail('phone countdown not shown');
+    }
     await Promise.all(active.map(p => p.page.waitForSelector('[data-act=pans]', { timeout: 30000 }).catch(() => fail(`p${p.k} no answer buttons q${qi + 1}`))));
     log(`q${qi + 1}: answer buttons on all phones`);
     if (qi === 3) {
@@ -139,6 +143,14 @@ async function waitText(page, re, ms = 20000) {
       if (!want.test(t)) fail(`p${p.k} q${qi + 1} reveal mismatch (expected ${want})`);
     }));
     log(`q${qi + 1}: reveal correct on all phones`);
+    if (qi === 0) { // a phone joins in the middle of the game
+      const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+      const page = await ctx.newPage(); watch(page, 'late');
+      await page.goto(`${BASE}/?pin=${pin}`); await page.waitForSelector('#jnick');
+      await page.fill('#jnick', 'מאחר'); await page.click('#jform button[type=submit]');
+      try { await waitText(page, /באמצע המשחק/, 15000); log('late joiner sees the "joined mid-game" note'); } catch (e) { fail('late joiner note missing'); }
+      active.push({ k: 900, ctx, page, name: 'מאחר', answers: {} });
+    }
   }
   /* ---------- final ---------- */
   await waitText(host, /סוף המשחק/, 40000).catch(() => fail('host never reached final'));
@@ -153,6 +165,13 @@ async function waitText(page, re, ms = 20000) {
   finals.forEach(f => { if (f.c > 0 && f.pts <= 0) fail(`p${f.k} has ${f.c} correct but ${f.pts} points`); });
   log('scores:', finals.map(f => `p${f.k}:${f.c}/${f.pts}`).join(' '));
 
+  // results download
+  try {
+    const [dl] = await Promise.all([host.waitForEvent('download', { timeout: 10000 }), host.click('[data-act=dlres]')]);
+    const csv = require('fs').readFileSync(await dl.path(), 'utf8');
+    const lines = csv.trim().split(/\r?\n/);
+    if (lines.length - 1 < N - 1) fail(`results csv has ${lines.length - 1} rows`); else log(`results CSV downloaded (${lines.length - 1} players): ${dl.suggestedFilename()}`);
+  } catch (e) { fail('results download failed: ' + e.message.slice(0, 80)); }
   // play again on the same code: phones should follow automatically
   await host.click('[data-act=again]');
   await Promise.all(active.slice(0, 5).map(p => waitText(p.page, /נכנסת!/, 20000).catch(() => fail(`p${p.k} did not follow "play again"`))));

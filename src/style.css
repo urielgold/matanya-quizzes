@@ -454,3 +454,7 @@ html.hasx #app{padding-block-start:56px}
 .lnames .nm.away{opacity:.5}
 .phone .tiles.tf{grid-template-columns:1fr 1fr}
 .hiddenttl{font-size:clamp(20px,3vw,30px);font-weight:700;opacity:.8;text-shadow:0 3px 18px #0009}
+.cd{font-family:var(--display);font-size:clamp(90px,16vw,180px);line-height:1;height:clamp(90px,16vw,180px);color:var(--spot);text-align:center;opacity:0;transform:scale(.6);transition:opacity .15s,transform .25s}
+.cd.on{opacity:1;transform:scale(1)}
+.pcd{font-size:96px;height:96px}
+.pconn.late{background:#3a1f7a;color:#fff;border:1px solid var(--spot);font-weight:600}
