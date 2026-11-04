@@ -398,7 +398,7 @@ function authV(){
   return `<div class="panel authp">
     <div class="label">למנחים</div>
     <h2 style="font-size:26px">${reset?'שחזור סיסמה':up?'פתיחת חשבון':'כניסה לחשבון'}</h2>
-    <p class="muted" style="margin:0">${reset?'נשלח לך קישור לבחירת סיסמה חדשה.':'כדי ליצור חידונים ולהפעיל משחק. משתתפים לא צריכים חשבון.'}</p>
+    <p class="muted" style="margin:0">${reset?'נשלח לך קישור לבחירת סיסמה חדשה.':'חשבון נדרש למי שבונה חידונים ומנהל משחק. כדי רק לשחק, לא צריך חשבון: מצטרפים עם קוד או QR.'}</p>
     ${providers.google&&!reset?`<button class="btn big gbtn" data-act="google">המשך עם Google</button><div class="or"><span>או</span></div>`:''}
     <form id="authform" class="aform">
       <label class="field"><span class="label">אימייל</span><input class="in" id="aemail" type="email" autocomplete="email" dir="ltr" required></label>
