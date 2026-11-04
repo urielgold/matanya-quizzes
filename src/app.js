@@ -642,7 +642,7 @@ async function startLive(id,resume){
     } else {
       const want=/^\d{6}$/.test(setupPin)?setupPin:(/^\d{6}$/.test(S.pin)?S.pin:null);
       setupPin='';if(S.pin){S.pin='';S.pinUsed=true;saveLocal()}
-      G.pin=await api.createGame(z.id,{phase:'lobby',gid:G.gid,title:cut(z.title||'חידון',60),n:G.qs.length},want);
+      G.pin=await api.createGame(z.id,{phase:'lobby',gid:G.gid,title:'',n:G.qs.length},want);
     }
   }catch(e){G=null;go({name:'quiz',id,err:'לא הצלחנו לפתוח משחק חי כרגע. בדקו את האינטרנט ונסו שוב.'});return}
   if(!G) return;
@@ -717,7 +717,7 @@ function connBadge(){
 
 // Build the public game state the phones see. The correct answer is only included at reveal.
 function buildState(){
-  const q=G.qs[G.i],st={gid:G.gid,title:cut(G.quiz.title||'חידון',60),phase:G.phase,i:G.i,n:G.qs.length,seq:G.seq,
+  const q=G.qs[G.i],st={gid:G.gid,title:G.phase==='lobby'?'':cut(G.quiz.title||'חידון',60),phase:G.phase,i:G.i,n:G.qs.length,seq:G.seq,
     kicked:[...G.kicked],names:G.names,scores:{}};
   G.players.forEach(p=>st.scores[p.key]=[p.score,p.streak||0,p.name,p.av]);
   if(['intro','question','reveal'].includes(G.phase)&&q){
@@ -963,7 +963,7 @@ function renderGame(){
           <button class="btn primary startbtn" id="startbtn" data-act="next">התחל ▶</button>
         </div>
       </div>
-      <div class="lmid"><h2>${esc(G.quiz.title||'חידון')}</h2></div>
+      <div class="lmid">${G.showTitle?`<h2>${esc(G.quiz.title||'חידון')}</h2><button class="btn sm ghost" data-act="ttoggle">הסתרת שם החידון</button>`:`<div class="hiddenttl">שם החידון מוסתר עד תחילת המשחק</div><button class="btn sm ghost" data-act="ttoggle">הצגת שם החידון</button>`}</div>
       <div class="lnames" id="lnames"></div>
     </div>`;
   } else if(G.phase==='intro'){
@@ -1169,7 +1169,7 @@ function renderPlayer(force){
     clearLastGame();
     h=`<div class="center"><div class="big-n">🏁</div><h2 style="font-size:28px">המשחק הסתיים</h2><p class="muted">תודה ששיחקת!</p><button class="btn primary" data-act="pleave">יציאה</button></div>`;
   } else if(!P.phase||P.phase==='lobby'){
-    h=`<div class="center">${avHTML(PL.av,'big')}<h2 style="font-size:32px">${esc(myName)}</h2><p class="muted" style="margin:0">נכנסת! רואים אותך על המסך. מחכים שהמנחה יתחיל.</p>${P.title?`<p style="margin:0;font-weight:700">${esc(P.title)}</p>`:''}
+    h=`<div class="center">${avHTML(PL.av,'big')}<h2 style="font-size:32px">${esc(myName)}</h2><p class="muted" style="margin:0">נכנסת! רואים אותך על המסך. מחכים שהמנחה יתחיל.</p>
       <button class="btn" data-act="avopen">${PL.avOpen?'סגירה':'החלפת דמות'}</button>
       ${PL.avOpen?`<div class="avgrid">${AVS.map((e,i)=>`<button class="avbtn ${i===PL.av?'on':''}" data-act="avpick" data-i="${i}" aria-label="דמות ${i+1}">${avHTML(i,'big3')}</button>`).join('')}</div>`:''}</div>`;
   } else if(P.phase==='intro'){
@@ -1274,6 +1274,7 @@ document.addEventListener('click',e=>{
     case 'savenow': {const q=findQ(id);if(q){q.updated=Date.now();flush(id)}titleSaved=true;b.classList.add('done');b.textContent='נשמר';break}
     case 'leave-no': {const o=$('#leaveask');o&&o.remove();break}
     case 'leave-yes': {const o=$('#leaveask');o&&o.remove();if(G){const qid=G.quiz.id;stopGame();go({name:'quiz',id:qid})}break}
+    case 'ttoggle': G.showTitle=!G.showTitle;renderGame();break;
     case 'pmenu': G.menu=G.menu===b.dataset.k?null:b.dataset.k;G.renaming=null;updateLobby();break;
     case 'pdel': kickPlayer(b.dataset.k);break;
     case 'pren': G.renaming=b.dataset.k;G.menu=null;updateLobby();setTimeout(()=>{const r=$('#rname');if(r){r.focus();r.select()}},0);break;

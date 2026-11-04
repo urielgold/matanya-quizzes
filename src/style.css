@@ -453,3 +453,4 @@ html.hasx #app{padding-block-start:56px}
 .pconn.soft{background:var(--surface);color:var(--muted);font-weight:600;border:1px solid var(--line)}
 .lnames .nm.away{opacity:.5}
 .phone .tiles.tf{grid-template-columns:1fr 1fr}
+.hiddenttl{font-size:clamp(20px,3vw,30px);font-weight:700;opacity:.8;text-shadow:0 3px 18px #0009}
