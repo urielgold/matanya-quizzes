@@ -28,7 +28,7 @@ function blankQ(){return {type:'quiz',q:'',answers:['','','',''],correct:[0],tim
 let local;
 try{local=JSON.parse(localStorage.getItem(LK))}catch(e){local=null}
 if(!local||!Array.isArray(local.quizzes)) local={quizzes:[],settings:{}};
-local.settings=Object.assign({music:'synth',vol:0.5,auto:true,sound:true,players:[],migrated:false,nick:'',pin:'145008',pinUsed:false},local.settings||{});
+local.settings=Object.assign({music:'synth',vol:0.5,auto:true,sound:true,players:[],migrated:false,nick:'',pin:'',pinUsed:true},local.settings||{});
 if(local.settings.pinUsed||!/^\d{6}$/.test(local.settings.pin)) local.settings.pin='';
 const newPin=()=>String(Math.floor(100000+Math.random()*900000));
 let setupPin='';
@@ -612,6 +612,7 @@ function mergePlayerRow(r){
 }
 function isHere(p){return !G.present||G.present.has(p.key)}
 function activePlayers(){return G.players.filter(p=>!p.left)}
+function lobbyPlayers(){return activePlayers().filter(p=>p.here)}
 async function startLive(id,resume){
   stopGame();
   const z=findQ(id);
@@ -810,7 +811,9 @@ function takeAnswerFinal(row){if(row&&row.round===G.round&&!G.kicked.has(row.pid
 function next(){
   if(!G) return;
   clearTimeout(G.to);
-  if(G.phase==='lobby'){phaseIntro();return}
+  if(G.phase==='lobby'){
+    if(G.live){G.players=G.players.filter(p=>p.here);G.players.forEach(p=>{p.score=0;p.streak=0})}
+    phaseIntro();return}
   if(G.phase==='intro'){phaseQuestion();return}
   if(G.phase==='question'){phaseReveal();return}
   if(G.phase==='reveal'){
@@ -827,7 +830,7 @@ function togglePause(){
   renderGame();publish();
 }
 function updateLobby(){
-  const ps=activePlayers();
+  const ps=lobbyPlayers();
   const c=$('#lcount'),n=$('#lnames');if(!n) return;
   c.innerHTML=`<b>${ps.length}</b>${ps.length===1?'משתתף':'משתתפים'}`;
   if(G.renaming&&$('#rname')) return;
@@ -1079,11 +1082,13 @@ window.addEventListener('online',()=>{if(PL)refetchGame()});
 function applyGame(row){
   if(!PL||!row) return;
   const st=row.state||{},old=PL.state||{};
+  const statusChanged=PL.status!==row.status;
   PL.status=row.status;
   if(st.phase==='question'&&!PL.seen[st.r]) PL.seen[st.r]=Date.now()-(st.time*1000-(st.rem||st.time*1000));
   const same=JSON.stringify(st)===JSON.stringify(old);
   PL.state=st;
   if(st.gid&&old.gid&&st.gid!==old.gid){PL.picked={};PL.seen={}}
+  if(statusChanged&&same)renderPlayer(true);
   if(!same){renderPlayer(true);if(st.phase==='question')checkMyAnswer()}
 }
 async function checkMyAnswer(){
