@@ -145,10 +145,12 @@ create or replace function public.host_update(
   p_pin text, p_state jsonb, p_status text, p_round int, p_accepting boolean,
   p_time int default 20, p_elapsed_ms int default 0)
 returns timestamptz language plpgsql security definer set search_path = public as $$
-declare v_open timestamptz;
+declare v_open timestamptz; v_status text;
 begin
-  select opened_at into v_open from games where pin = p_pin and host = auth.uid() for update;
+  select opened_at, status into v_open, v_status from games where pin = p_pin and host = auth.uid() for update;
   if not found then raise exception 'not_your_game'; end if;
+  -- once a game has ended, late/in-flight updates from the host screen must not revive it
+  if v_status = 'ended' then return v_open; end if;
   if p_accepting then
     v_open := now() - make_interval(secs => greatest(p_elapsed_ms, 0) / 1000.0);
   end if;
