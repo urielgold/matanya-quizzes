@@ -1,0 +1,32 @@
+{
+  "name": "matanya-quizzes",
+  "version": "1.0.0",
+  "description": "חידוני מתניה — live quiz app",
+  "scripts": {
+    "build": "node build.mjs",
+    "serve": "npx --yes serve dist -l 5173",
+    "test": "node tests/live-game.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/urielgold/matanya-quizzes.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/urielgold/matanya-quizzes/issues"
+  },
+  "homepage": "https://github.com/urielgold/matanya-quizzes#readme",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  },
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  }
+}
