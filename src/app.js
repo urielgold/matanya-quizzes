@@ -28,7 +28,8 @@ function blankQ(){return {type:'quiz',q:'',answers:['','','',''],correct:[0],tim
 let local;
 try{local=JSON.parse(localStorage.getItem(LK))}catch(e){local=null}
 if(!local||!Array.isArray(local.quizzes)) local={quizzes:[],settings:{}};
-local.settings=Object.assign({music:'synth',vol:0.5,auto:true,sound:true,players:[],migrated:false,nick:'',pin:'',pinUsed:true},local.settings||{});
+local.settings=Object.assign({music:'synth',vol:0.5,auto:false,sound:true,players:[],migrated:false,nick:'',pin:'',pinUsed:true},local.settings||{});
+if(!local.settings.autoV2){local.settings.auto=false;local.settings.autoV2=true}
 if(local.settings.pinUsed||!/^\d{6}$/.test(local.settings.pin)) local.settings.pin='';
 const newPin=()=>String(Math.floor(100000+Math.random()*900000));
 let setupPin='';
@@ -730,7 +731,7 @@ function buildState(){
     if(q) st.c=q.correct;
     st.np=rk.length;st.res={};
     rk.forEach((p,k)=>st.res[p.key]=[p.score,p.gain,k+1,p.choice===null?-1:p.choice]);
-    st.top=rk.slice(0,5).map(p=>[cut(p.name,24),p.score,p.av]);
+    st.top=rk.map(p=>[cut(p.name,24),p.score,p.av]);
   }
   return st;
 }
@@ -844,11 +845,11 @@ function next(){
     phaseIntro();return}
   if(G.phase==='intro'){phaseQuestion();return}
   if(G.phase==='question'){phaseReveal();return}
-  if(G.phase==='reveal'){
-    if(G.i>=G.qs.length-1){G.phase='final';renderGame();publish();chime();setTimeout(chime,400);setTimeout(()=>{if(G&&G.phase==='final')musicPlay('party')},1200);return}
-    if(G.players.length>1){G.phase='board';renderGame();publish();if(S.auto)G.to=setTimeout(next,5000);return}
-  }
-  if(G.phase==='reveal'||G.phase==='board'){G.i++;phaseIntro()}
+  const last=G.i>=G.qs.length-1;
+  if(G.phase==='reveal'&&G.players.length>1){G.phase='board';renderGame();publish();if(S.auto)G.to=setTimeout(next,5000);return}
+  if(G.phase==='reveal'||G.phase==='board'){
+    if(last){G.phase='final';renderGame();publish();chime();setTimeout(chime,400);setTimeout(()=>{if(G&&G.phase==='final')musicPlay('party')},1200);return}
+    G.i++;phaseIntro()}
 }
 function togglePause(){
   if(!G||G.phase!=='question'||revealing) return;
@@ -1022,11 +1023,11 @@ function renderGame(){
       ${S.auto?'<div class="hint">ממשיכים אוטומטית בעוד רגע</div>':''}
     </div>`;
   } else if(G.phase==='board'){
-    const rk=ranked(),r=rk.slice(0,5);
+    const rk=ranked(),r=rk;
     const best=rk.slice().sort((a,b)=>(b.streak||0)-(a.streak||0))[0];
     h=`<div class="stage">${stageTop()}<div class="center">
       <h2 style="font-size:40px">טבלת הניקוד</h2>
-      <div class="board">${boardRows(r)}</div>
+      <div class="board" style="max-height:62vh;overflow:auto;width:min(640px,100%)">${boardRows(r)}</div>
       ${best&&best.streak>=3?`<div class="streak"><span style="font-size:28px">🔥</span><span><b>${esc(best.name)}</b> עם רצף התשובות הנכונות הארוך ביותר: ${best.streak}!</span>${avHTML(best.av,'sm')}</div>`:''}
     </div></div>`;
   } else if(G.phase==='final'){
@@ -1241,7 +1242,7 @@ function renderPlayer(force){
     </div>`;
   } else if(P.phase==='board'){
     h=`<div class="center">${mine?`<div class="label">המקום שלך</div><div class="intro-n">${mine[2]}</div><p style="margin:0;font-weight:700">${fmt(mine[0])} נקודות</p>`:''}
-      <div class="board">${(P.top||[]).map((t,k)=>`<div class="brow ${k===0?'first':''}"><span class="r">${k+1}</span>${avHTML(t[2],'sm')}<span class="nm">${esc(t[0])}</span><span class="sc">${fmt(t[1])}</span></div>`).join('')}</div></div>`;
+      <div class="board" style="max-height:52vh;overflow:auto;width:min(640px,100%)">${(P.top||[]).map((t,k)=>`<div class="brow ${k===0?'first':''}"><span class="r">${k+1}</span>${avHTML(t[2],'sm')}<span class="nm">${esc(t[0])}</span><span class="sc">${fmt(t[1])}</span></div>`).join('')}</div></div>`;
   } else if(P.phase==='final'){
     h=`<div class="center"><div class="label">סוף המשחק</div>
       ${mine?`<div class="intro-n">${mine[2]===1?'🏆':mine[2]}</div><h2 style="font-size:30px">${mine[2]===1?'ניצחת!':`מקום ${mine[2]}`}</h2><p style="margin:0;font-weight:700">${fmt(mine[0])} נקודות</p>`:''}

@@ -48,6 +48,13 @@ async function waitText(page, re, ms = 20000) {
   }
   await host.waitForSelector('.kgrid', { timeout: 20000 });
   log('host signed in');
+  if ((await host.locator('.kcard', { hasText: QUIZ_TITLE }).count()) === 0) {
+    // the sample quiz is missing from the test account: import the fixture quiz
+    await host.setInputFiles('#impfile', require('path').join(__dirname, 'fixtures', 'sample-quiz.json'));
+    await host.waitForTimeout(2500);
+    await host.goto(BASE + '/');
+    await host.waitForSelector('.kgrid', { timeout: 20000 });
+  }
   const card = host.locator('.kcard', { hasText: QUIZ_TITLE }).first();
   await card.locator('.ktitle').click();
   await host.click('.hostbtn');
@@ -143,6 +150,12 @@ async function waitText(page, re, ms = 20000) {
       if (!want.test(t)) fail(`p${p.k} q${qi + 1} reveal mismatch (expected ${want})`);
     }));
     log(`q${qi + 1}: reveal correct on all phones`);
+    // standings after every question: host moves on manually
+    await host.click('[data-act=next]');
+    await Promise.all([host.waitForSelector('.board .brow', { timeout: 10000 }).catch(() => fail(`q${qi + 1} host standings missing`)),
+      ...active.map(p => p.page.waitForSelector('.board .brow', { timeout: 10000 }).catch(() => fail(`p${p.k} q${qi + 1} standings missing`)))]);
+    log(`q${qi + 1}: standings shown on host and all phones`);
+    await host.click('[data-act=next]'); // → next question (or final after the last one)
     if (qi === 0) { // a phone joins in the middle of the game
       const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
       const page = await ctx.newPage(); watch(page, 'late');
