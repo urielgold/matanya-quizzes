@@ -458,3 +458,6 @@ html.hasx #app{padding-block-start:56px}
 .cd.on{opacity:1;transform:scale(1)}
 .pcd{font-size:96px;height:96px}
 .pconn.late{background:#3a1f7a;color:#fff;border:1px solid var(--spot);font-weight:600}
+
+.miniqr{width:76px;height:76px;flex:none;background:#fff;border-radius:10px;padding:4px;display:grid;place-items:center}
+.miniqr svg{width:100%;height:100%;display:block}

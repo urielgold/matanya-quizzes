@@ -921,6 +921,7 @@ function stageTop(){
   const q=G.qs[G.i];
   return `<div class="hconn" id="hconn" hidden></div><div class="sbar">
     <span class="pill">שאלה ${G.i+1} / ${G.qs.length}</span>
+    ${G.live&&G.phase!=='lobby'?`<div class="miniqr" id="qrbox2" title="סרקו כדי להצטרף"></div>`:''}
     <span class="pill">${G.live?`קוד: <span dir="ltr">${G.pin}</span>`:q.points===2?'ניקוד כפול':q.points===0?'בלי ניקוד':esc(G.quiz.title)}</span>
     <div class="controls">
       ${S.music!=='off'?`<button class="btn sm ghost mutebtn" data-act="mute" aria-label="${M.kind?'השתקת מוזיקה':'הפעלת מוזיקה'}">${M.kind?'🔊':'🔇'}</button>`:''}
@@ -1046,10 +1047,18 @@ function renderGame(){
   }
   app.innerHTML=h;
   if(G.phase==='lobby'){updateLobby();drawLobby();drawQR()}
+  else if(G.live) drawMiniQR();
   connBadge();
 }
 
 function joinURL(){return location.origin+'/?pin='+(G&&G.pin)}
+function drawMiniQR(){
+  if(!G||!G.live) return;
+  const put=svg=>{const b=$('#qrbox2');if(b)b.innerHTML=svg};
+  if(G.qr){put(G.qr);return}
+  drawQR();
+  const t=setInterval(()=>{if(G&&G.qr){clearInterval(t);put(G.qr)}},200);setTimeout(()=>clearInterval(t),5000);
+}
 function drawQR(){
   if(!G||!G.live) return;
   if(G.qr){const b=$('#qrbox');if(b&&!b.innerHTML)b.innerHTML=G.qr;return}
