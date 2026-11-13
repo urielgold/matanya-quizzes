@@ -230,6 +230,7 @@ async function boot(){
   if(qpin.length===6){
     history.replaceState(null,'',location.pathname);
     go({name:'join',pin:qpin});
+    warmChannel(qpin);
   } else {
     // Back to a game this phone was already playing (e.g. after the browser reloaded the tab)
     const last=lastGame();
@@ -655,6 +656,7 @@ async function startLive(id,resume){
       if(mergePlayerRow(p.new)) afterPlayersChange();
     },
     onAnswer:row=>takeAnswer(row),
+    onJoin:p=>{if(!G||!p||!p.pid) return;if(mergePlayerRow({pid:p.pid,name:p.name,av:p.av})) afterPlayersChange()},
     onStatus:s=>{if(!G) return;const ok=s==='SUBSCRIBED';if(ok&&!G.conn){syncPlayers();if(G.phase==='question')syncAnswers()}G.conn=ok||s==='CONNECTING';connBadge()},
   });
   // Safety net in case a realtime message is missed: re-read players/answers every few seconds.
@@ -921,8 +923,8 @@ function stageTop(){
   const q=G.qs[G.i];
   return `<div class="hconn" id="hconn" hidden></div><div class="sbar">
     <span class="pill">שאלה ${G.i+1} / ${G.qs.length}</span>
-    ${G.live&&G.phase!=='lobby'?`<div class="miniqr" id="qrbox2" title="סרקו כדי להצטרף"></div>`:''}
     <span class="pill">${G.live?`קוד: <span dir="ltr">${G.pin}</span>`:q.points===2?'ניקוד כפול':q.points===0?'בלי ניקוד':esc(G.quiz.title)}</span>
+    ${G.live&&G.phase!=='lobby'?`<div class="miniqr" id="qrbox2" title="סרקו כדי להצטרף"></div>`:''}
     <div class="controls">
       ${S.music!=='off'?`<button class="btn sm ghost mutebtn" data-act="mute" aria-label="${M.kind?'השתקת מוזיקה':'הפעלת מוזיקה'}">${M.kind?'🔊':'🔇'}</button>`:''}
       ${G.phase==='question'?`<button class="btn sm" data-act="pause">${G.paused?'המשך':'השהיה'}</button>`:''}
@@ -1095,6 +1097,27 @@ function joinErr(e){
   if(/name_required/.test(m)) return 'כתבו שם כדי שיראו אתכם על המסך.';
   return 'לא הצלחנו להתחבר. בדקו את האינטרנט ונסו שוב.';
 }
+// Player channel handlers. They only act once this phone has joined the given pin.
+function playerHandlers(pin){
+  return {
+    onGame:row=>{if(PL&&PL.pin===pin) applyGame(row)},
+    onGone:()=>{if(PL&&PL.pin===pin){PL.gone=true;renderPlayer(true)}},
+    onPresence:st=>{if(!PL||PL.pin!==pin) return;const h=!!(st&&st.host&&st.host.length);if(h)PL.hostSeenAt=Date.now();if(h!==PL.hostHere){PL.hostHere=h;renderPlayer(true)}},
+    onStatus:s=>{if(!PL||PL.pin!==pin) return;const ok=s==='SUBSCRIBED';if(ok)refetchGame();if(ok!==PL.conn){PL.conn=ok;connBar()}},
+  };
+}
+let WARM=null;
+// Open the game channel while the phone is still on the join form, so joining skips the connection delay.
+function warmChannel(pin){
+  if(WARM&&WARM.pin===pin) return;
+  if(WARM) WARM.ch.unsub();
+  WARM={pin,ch:api.playerChannel(pin,playerHandlers(pin))};
+}
+function takeWarmChannel(pin){
+  if(WARM&&WARM.pin===pin){const c=WARM.ch;WARM=null;return c}
+  if(WARM){WARM.ch.unsub();WARM=null}
+  return api.playerChannel(pin,playerHandlers(pin));
+}
 async function joinGame(pin,nick,av){
   S.nick=nick;saveLocal();
   if(av==null) av=Number.isInteger(S.avIdx)?S.avIdx%AVS.length:Math.floor(Math.random()*AVS.length);
@@ -1108,12 +1131,8 @@ async function joinGame(pin,nick,av){
   PL.late=!!(res.state&&res.state.phase&&res.state.phase!=='lobby'&&!(res.state.scores&&res.state.scores[playerId()]));
   saveLastGame();
   view={name:'player'};
-  PL.ch=api.playerChannel(pin,{
-    onGame:row=>applyGame(row),
-    onGone:()=>{if(PL){PL.gone=true;renderPlayer(true)}},
-    onPresence:st=>{if(!PL) return;const h=!!(st&&st.host&&st.host.length);if(h)PL.hostSeenAt=Date.now();if(h!==PL.hostHere){PL.hostHere=h;renderPlayer(true)}},
-    onStatus:s=>{if(!PL) return;const ok=s==='SUBSCRIBED';if(ok)refetchGame();if(ok!==PL.conn){PL.conn=ok;connBar()}},
-  });
+  PL.ch=takeWarmChannel(pin);
+  PL.ch.announce({pid:api.playerIdentity().pid,name:nick,av});
   // Safety net: re-read the game every few seconds, and right away when the phone wakes up.
   PL.poll=setInterval(()=>{if(PL&&document.visibilityState==='visible')refetchGame()},PL.conn?5000:2500);
   PL.clock=setInterval(playerClock,250);
@@ -1353,6 +1372,7 @@ document.addEventListener('dragover',e=>{const b=e.target.closest&&e.target.clos
 document.addEventListener('dragend',()=>{from=null;document.querySelectorAll('.slide.over,.slide.dragging').forEach(x=>x.classList.remove('over','dragging'))});
 document.addEventListener('drop',e=>{const b=e.target.closest&&e.target.closest('.slide[data-i]');if(from===null||!b)return;e.preventDefault();const to=+b.dataset.i,z=view.id&&findQ(view.id);if(z&&to!==from){const[m]=z.questions.splice(from,1);z.questions.splice(to,0,m);view.qi=to;persist(z);}from=null;render()});
 })();
+document.addEventListener('input',e=>{if(e.target&&e.target.id==='jpin'){const v=e.target.value.replace(/\D/g,'');if(v.length===6)warmChannel(v)}});
 document.addEventListener('input',e=>{if(e.target&&e.target.id==='ztitle'&&titleSaved){titleSaved=false;const t=$('#tsave');if(t){t.classList.remove('done');t.textContent='שמור'}}});
 document.addEventListener('change',e=>{
   if(e.target.id==='impfile'&&e.target.files&&e.target.files[0]){

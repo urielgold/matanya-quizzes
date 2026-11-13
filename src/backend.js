@@ -149,6 +149,8 @@ export function hostChannel(pin, h) {
   ch.on('presence', { event: 'sync' }, () => h.onPresence && h.onPresence(ch.presenceState()))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: 'pin=eq.' + pin }, p => h.onPlayers && h.onPlayers(p))
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'answers', filter: 'pin=eq.' + pin }, p => h.onAnswer && h.onAnswer(p.new))
+    // Fast path: a phone announces itself directly (broadcast skips the database change feed).
+    .on('broadcast', { event: 'joined' }, m => h.onJoin && h.onJoin(m && m.payload))
     .subscribe(status => {
       h.onStatus && h.onStatus(status);
       if (status === 'SUBSCRIBED') ch.track({ role: 'host', t: Date.now() }).catch(() => { });
@@ -201,16 +203,29 @@ export async function myAnswer(pin, round) {
   try { return check(await sb.rpc('my_answer', { p_pin: pin, p_pid: me.pid, p_secret: me.secret, p_round: round })); }
   catch (e) { return null; }
 }
-// Player channel: follow the game row + announce presence.
+// Player channel: follow the game row. It can be opened before joining (warm-up),
+// and the phone announces itself with a broadcast message as soon as it has joined.
 export function playerChannel(pin, h) {
   const me = playerIdentity();
+  let subscribed = false, pending = null;
   const ch = sb.channel('room-' + pin, { config: { presence: { key: me.pid } } });
+  const flush = () => {
+    if (!pending) return;
+    ch.send({ type: 'broadcast', event: 'joined', payload: pending }).catch(() => { });
+  };
   ch.on('presence', { event: 'sync' }, () => h.onPresence && h.onPresence(ch.presenceState()))
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: 'pin=eq.' + pin }, p => h.onGame && h.onGame(p.new))
     .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'games' }, p => { if (p.old && p.old.pin === pin) h.onGone && h.onGone(); })
     .subscribe(status => {
+      subscribed = status === 'SUBSCRIBED';
       h.onStatus && h.onStatus(status);
-      if (status === 'SUBSCRIBED') ch.track({ role: 'player', pid: me.pid, t: Date.now() }).catch(() => { });
+      if (subscribed) {
+        ch.track({ role: 'player', pid: me.pid, t: Date.now() }).catch(() => { });
+        flush();
+      }
     });
-  return { unsub: () => { try { sb.removeChannel(ch); } catch (e) { } } };
+  return {
+    unsub: () => { try { sb.removeChannel(ch); } catch (e) { } },
+    announce: payload => { pending = payload; if (subscribed) flush(); },
+  };
 }
